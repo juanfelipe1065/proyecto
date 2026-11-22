@@ -1,206 +1,86 @@
-
-import streamlit as st
 import pandas as pd
-
+import streamlit as st
 
 st.title("Mercado laboral en Inteligencia Artificial")
-st.write("Dashboard para explorar ofertas laborales, salarios y habilidades.")
+st.write("Análisis de ofertas laborales, salarios y habilidades.")
+
+def promedio(columna):
+    """Calcula el promedio de una columna numérica."""
+    return columna.mean()
 
 
-archivo = st.file_uploader(
-    "Sube el archivo AI Job Market Dataset.csv",
-    type="csv"
-)
+
+def filtrar_experiencia(tabla, nivel):
+    """Filtra los datos según el nivel de experiencia elegido."""
+    if nivel == "Todos":
+        return tabla
+    else:
+        return tabla[tabla["experience_level"] == nivel]
+
+
+archivo = st.file_uploader("Sube el archivo CSV", type="csv")
 
 if archivo is not None:
+    datos = pd.read_csv(archivo)
+    st.success("Archivo cargado correctamente")
 
-    df = pd.read_csv(archivo)
-
-    st.success("Dataset cargado correctamente")
-
-    
     st.sidebar.header("Filtros")
+    nivel = st.sidebar.selectbox("Experiencia", ["Todos", "Entry", "Mid", "Senior"])
+    pais = st.sidebar.selectbox("País", ["Todos"] + sorted(datos["country"].unique().tolist()))
 
-    experiencias = ["Todos"] + sorted(df["experience_level"].dropna().unique().tolist())
-
-    experiencia = st.sidebar.selectbox(
-        "Nivel de experiencia",
-        experiencias
-    )
-
-    paises = ["Todos"] + sorted(df["country"].dropna().unique().tolist())
-
-    pais = st.sidebar.selectbox(
-        "País",
-        paises
-    )
-
-  
-    datos = df.copy()
-
-    if experiencia != "Todos":
-        datos = datos[datos["experience_level"] == experiencia]
+    datos = filtrar_experiencia(datos, nivel)
 
     if pais != "Todos":
         datos = datos[datos["country"] == pais]
 
-   
-    st.header("Resumen del mercado laboral")
-
-    columna1, columna2, columna3 = st.columns(3)
-
-    columna1.metric("Ofertas laborales", len(datos))
-
     if len(datos) > 0:
+        st.header("Resumen de los datos")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Ofertas", len(datos))
+        c2.metric("Salario promedio", f"{promedio(datos['salary']):,.0f}")
+        c3.metric("Experiencia promedio", f"{promedio(datos['years_experience']):.1f} años")
 
-        columna2.metric(
-            "Salario promedio",
-            f"{datos['salary'].mean():,.0f}"
-        )
-
-        columna3.metric(
-            "Experiencia promedio",
-            f"{datos['years_experience'].mean():.1f} años"
-        )
-
-       
-        st.header("Datos del dataset")
-
-        st.dataframe(datos.head(10))
-
-        
-        st.header("Salario promedio según experiencia")
-
+        st.header("1. Salario promedio por experiencia (barras)")
         niveles = ["Entry", "Mid", "Senior"]
         salarios = []
 
-        for nivel in niveles:
-
-            grupo = datos[datos["experience_level"] == nivel]
-
+        for nombre in niveles:
+            grupo = datos[datos["experience_level"] == nombre]
             if len(grupo) > 0:
-                salarios.append(grupo["salary"].mean())
+                salarios.append(promedio(grupo["salary"]))
             else:
                 salarios.append(0)
 
-        grafica_salarios = pd.DataFrame({
-            "Nivel de experiencia": niveles,
-            "Salario promedio": salarios
-        })
+        tabla_salarios = pd.DataFrame({"Nivel": niveles, "Salario promedio": salarios})
+        st.bar_chart(tabla_salarios, x="Nivel", y="Salario promedio")
 
-        st.bar_chart(
-            grafica_salarios,
-            x="Nivel de experiencia",
-            y="Salario promedio"
-        )
+        st.header("2. Ofertas por año (líneas)")
+        ofertas_anuales = datos["job_posting_year"].value_counts().sort_index()
+        st.line_chart(ofertas_anuales)
 
-        
-        st.header("Habilidades tecnológicas solicitadas")
+        st.header("3. Salario promedio por año (área)")
+        salario_anual = datos.groupby("job_posting_year")["salary"].mean()
+        st.area_chart(salario_anual)
 
-        habilidades = [
-            "skills_python",
-            "skills_sql",
-            "skills_ml",
-            "skills_deep_learning",
-            "skills_cloud"
-        ]
+        st.header("Cargos más frecuentes")
+        st.dataframe(datos["job_title"].value_counts().head(6))
 
-        nombres_habilidades = [
-            "Python",
-            "SQL",
-            "Machine Learning",
-            "Deep Learning",
-            "Cloud"
-        ]
+        st.header("Widget 1: consultar ofertas por salario")
+        minimo = st.slider("Salario mínimo", 0, 210000, 50000, 10000)
+        ofertas = datos[datos["salary"] >= minimo]
+        st.write("Ofertas encontradas:", len(ofertas))
+        st.dataframe(ofertas[["job_title", "country", "salary"]].head(10))
 
-        porcentajes = []
+        st.header("Widget 2: ofertas con Python")
+        mostrar = st.checkbox("Mostrar ofertas que requieren Python")
+        if mostrar:
+            python = datos[datos["skills_python"] == 1]
+            st.write("Ofertas con Python:", len(python))
+            st.dataframe(python[["job_title", "country", "salary"]].head(10))
 
-        for habilidad in habilidades:
-            porcentajes.append(datos[habilidad].mean() * 100)
-
-        grafica_habilidades = pd.DataFrame({
-            "Habilidad": nombres_habilidades,
-            "Porcentaje de ofertas": porcentajes
-        })
-
-        st.bar_chart(
-            grafica_habilidades,
-            x="Habilidad",
-            y="Porcentaje de ofertas"
-        )
-
-       
-        st.header("Cargos laborales más frecuentes")
-
-        cargos = datos["job_title"].value_counts().head(6)
-
-        st.bar_chart(cargos)
-
-        st.header("Consultar ofertas por salario")
-
-        st.write(
-            "Selecciona el salario mínimo para consultar "
-            "las ofertas laborales disponibles."
-        )
-
-        salario_minimo = st.slider(
-            "Selecciona el salario mínimo",
-            min_value=0,
-            max_value=210000,
-            value=50000,
-            step=10000
-        )
-
-        ofertas_salario = datos[
-            datos["salary"] >= salario_minimo
-        ]
-
-        st.write(
-            "Cantidad de ofertas encontradas:",
-            len(ofertas_salario)
-        )
-
-        st.dataframe(
-            ofertas_salario[
-                ["job_title", "country", "salary"]
-            ].head(10)
-        )
-
-        
-        st.header("Ofertas laborales que requieren Python")
-
-        st.write(
-            "Activa la casilla para visualizar las ofertas "
-            "laborales que incluyen Python como habilidad."
-        )
-
-        mostrar_python = st.checkbox(
-            "Mostrar ofertas que requieren Python"
-        )
-
-        if mostrar_python:
-
-            ofertas_python = datos[
-                datos["skills_python"] == 1
-            ]
-
-            st.write(
-                "Cantidad de ofertas que requieren Python:",
-                len(ofertas_python)
-            )
-
-            st.dataframe(
-                ofertas_python[
-                    ["job_title", "country", "salary"]
-                ].head(10)
-            )
-
+        st.header("Primeros registros")
+        st.dataframe(datos.head(10))
     else:
-        st.warning(
-            "No hay registros que coincidan con los filtros seleccionados."
-        )
-
+        st.warning("No hay ofertas con los filtros seleccionados.")
 else:
-    st.info(
-        "Para comenzar, sube el archivo CSV en el espacio de arriba."
-    )
+    st.info("Sube el archivo CSV para comenzar.")
